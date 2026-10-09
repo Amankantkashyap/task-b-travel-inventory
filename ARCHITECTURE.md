@@ -1,0 +1,27 @@
+# Architecture
+
+## Boundaries and models
+
+`TravelController` handles HTTP; `TransactionValidator` and `MetadataCodec` validate the payloads; `TransactionService` owns identity and transaction lifecycle; `InvoiceService` owns snapshot creation/replacement; `TravelRepository` contains SQL; `ApiViews` builds boundary responses and rollups. Spring `TransactionTemplate` makes multi-table writes atomic. `models/TransactionModels` groups transaction records and metadata; `models/InvoiceModels` groups invoice records, snapshots, and rollups; `models/PaginationModels` holds the shared page response. Invoices reuse transaction records for copied line contents. DTOs carry decimal API amounts; domain records and database amounts use `long`/`BIGINT` minor units. Conversion is exact, and sums use `Math.addExact`. Rates remain decimal fractions.
+
+`transactions` holds UUID identity, globally unique `external_id`, type, currency, time, gross `total_minor`, and native JSON metadata. `transaction_taxes` holds name, optional rate, and amount; `transaction_fees` holds name and amount. Each has its own indexed foreign key and cascading deletion. The nested metadata records in `TransactionModels`, sharing the sealed `Metadata` interface, describe flight origin/destination, integer fare and coupons with flight numbers; hotel name/address, dates, nights, integer room rate and extras; rail legs; and trip/agent-call fee details. JSON avoids sparse columns and extra segment joins for this exercise. Supported metadata is validated on write and returned on read; extensible metadata search would justify additional columns/indexes.
+
+`invoices` stores currency and gross total. `invoice_lines` copies each transaction header and metadata; `invoice_taxes` and `invoice_fees` copy its charges. A source `transaction_id` tracks membership, but **invoice GET never joins to transactions**. Unique `(invoice_id, transaction_id)` and `(invoice_id, position)` constraints prevent repeated lines. Snapshot children cascade on invoice deletion; source transactions never cascade. Rollups use snapshot charges, grouping taxes by name/numeric rate and fees by name. Gross totals already include charges.
+
+## Identity and concurrent writes
+
+The unique constraint on `transactions.external_id` is the final authority. A precheck gives cheap duplicate responses; it cannot guarantee correctness. Concurrent inserts still encounter the unique constraint. The losing write rolls back before looking up the committed winner and returning 409 with its ID. No application locks or external coordination services are used.
+
+Transaction PATCH/DELETE lock the transaction header with `SELECT … FOR UPDATE` before checking indexed invoice membership or touching charge rows. Invoice create/replacement locks all selected transactions in stable UUID order and holds them until snapshot commit. This coordinates billing with transaction edits/deletes: an edit either commits before capture, or waits and is rejected as billed. Invoice PATCH/DELETE lock the invoice header first, so replacement/deletion cannot tear a snapshot. Detail reads lock their header for the read transaction to avoid mixing an old header with new child rows. Lock waits are bounded; transient database conflicts return retryable 409. [Spring transaction management](https://docs.spring.io/spring-framework/reference/7.1/data-access/transaction/programmatic.html) and [H2 locking documentation](https://h2database.com/html/features.html) describe these mechanisms.
+
+Invoice replacements validate every ID, currency, total, and rollup before rewriting snapshots, in one database transaction. Deleting an invoice releases its memberships. Transactions may appear on multiple invoices; PATCH/DELETE remain blocked while any membership exists. Direct database mutation is outside the public contract, but tests deliberately do it to prove snapshot independence.
+
+## High volume
+
+Primary keys index ID lookups; the unique external-ID index protects duplicate POSTs; `invoice_lines.transaction_id` indexes billed checks; parent indexes support child reads/deletes. Every list is a **single bounded SQL query**, selecting only compact headers, with default limit 50/max 100 and offset pagination. Lists do not lock rows or load child collections. Details are capped at 100 transactions/charges/segments per collection. Small bounded detail reads use straightforward child queries; batch fetching would reduce round trips for large invoice details.
+
+The first bottlenecks are hot-row lock waits, the connection pool, and disk/write throughput in embedded H2. Large offsets scan past increasing numbers of indexed entries, so cursor pagination is the next improvement. Constraints prevent duplicate writes; short atomic operations, stable locking order, and bounded summaries prevent unbounded application work. H2 runs in one service process; a multi-instance deployment would require a server database such as PostgreSQL, migration tooling, and revisiting dialect-specific JSON/locking SQL. `schema.sql` is idempotent bootstrap DDL, not a schema-evolution system. No claim of measured throughput is made.
+
+## Verification
+
+Tests exercise the full Spring MVC request pipeline and file-backed H2, including concurrent requests, money/rollups, constraint enforcement, rollback after a partial write attempt, frozen snapshots after direct source mutation, and closing/reopening application contexts against the same database. MockMvc avoids a network-port dependency while preserving controller and database behavior.

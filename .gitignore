@@ -1,0 +1,12 @@
+target/
+data/
+.env
+*.db
+*.mv.db
+*.trace.db
+.DS_Store
+.idea/
+*.iml
+
+# Local interview notes are not part of the reviewer submission.
+INTERVIEW_PREP.md

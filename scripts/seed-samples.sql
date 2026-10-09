@@ -1,0 +1,14 @@
+-- Sample transactions from the assignment fixtures. Run once against an empty database.
+SET AUTOCOMMIT FALSE;
+INSERT INTO transactions(id,external_id,type,currency,occurred_at,total_minor,metadata) VALUES ('a1f2e521-5047-406a-ab5a-81cc0e931181','flight-TXL-LHR-2026-03-11','flight','EUR','2026-03-11T06:40:00Z',22000,'{"origin":"TXL","destination":"LHR","fare_minor":18000,"coupons":[{"flight_number":"BA982","carrier":"BA","from":"TXL","to":"LHR","departure":"2026-03-11T07:00:00Z","arrival":"2026-03-11T08:20:00Z"}]}' FORMAT JSON);
+INSERT INTO transaction_taxes(transaction_id,name,rate,amount_minor) VALUES ('a1f2e521-5047-406a-ab5a-81cc0e931181','Airport tax',NULL,1500);
+INSERT INTO transaction_fees(transaction_id,name,amount_minor) VALUES ('a1f2e521-5047-406a-ab5a-81cc0e931181','YQ',2500);
+INSERT INTO transactions(id,external_id,type,currency,occurred_at,total_minor,metadata) VALUES ('ae37d3cd-c36d-4f29-a8f6-34c560fbedab','hotel-LON-2026-03-11','hotel','EUR','2026-03-11T15:00:00Z',33170,'{"name":"Hotel Mitte London","address":{"street":"12 Kingsway","city":"London","country":"GB"},"check_in":"2026-03-11","check_out":"2026-03-13","nights":2,"room_rate_per_night_minor":14000,"extras":[{"name":"Breakfast","amount_minor":3000}]}' FORMAT JSON);
+INSERT INTO transaction_taxes(transaction_id,name,rate,amount_minor) VALUES ('ae37d3cd-c36d-4f29-a8f6-34c560fbedab','VAT',0.07,2170);
+INSERT INTO transactions(id,external_id,type,currency,occurred_at,total_minor,metadata) VALUES ('deae8786-1b43-49c2-9fd1-ef69df3c7c22','rail-STP-PAR-2026-03-13','rail','EUR','2026-03-13T09:00:00Z',9400,'{"legs":[{"origin":"London St Pancras","destination":"Lille Europe","departure":"2026-03-13T09:00:00Z","arrival":"2026-03-13T10:30:00Z","train_number":"EST9108","class":"standard"},{"origin":"Lille Europe","destination":"Paris Nord","departure":"2026-03-13T11:00:00Z","arrival":"2026-03-13T12:05:00Z","train_number":"EST9122","class":"standard"}]}' FORMAT JSON);
+INSERT INTO transaction_fees(transaction_id,name,amount_minor) VALUES ('deae8786-1b43-49c2-9fd1-ef69df3c7c22','Booking fee',400);
+INSERT INTO transactions(id,external_id,type,currency,occurred_at,total_minor,metadata) VALUES ('5ed3b100-f577-41b5-b4ae-21dae51007ed','navan-trip-fee-2026-03-11','navan_fee','EUR','2026-03-11T06:40:00Z',2500,'{"fee_kind":"trip_fee","description":"Navan trip fee","related_external_id":"flight-TXL-LHR-2026-03-11"}' FORMAT JSON);
+INSERT INTO transactions(id,external_id,type,currency,occurred_at,total_minor,metadata) VALUES ('ae201e69-a3a2-4e5e-8c86-64a325d70309','navan-agent-call-2026-03-11','navan_fee','EUR','2026-03-11T18:00:00Z',1500,'{"fee_kind":"agent_call_fee","description":"Agent fee for support call","related_external_id":"hotel-LON-2026-03-11"}' FORMAT JSON);
+COMMIT;
+SET AUTOCOMMIT TRUE;
+SELECT type, external_id, currency, total_minor FROM transactions ORDER BY type, external_id;
